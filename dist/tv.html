@@ -140,6 +140,30 @@
 
   /* the card keeps its width on the left; the clock is centred in the space between it and the right edge */
   .mid{display:grid;grid-template-columns:1fr auto;align-items:center;gap:4.5vw}
+  /* In the prayer view, keep the clock intact and give the six compact cards their own full-width row. */
+  .mid.prayer-layout{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) auto;gap:1.5vh}
+  .mid.prayer-layout .clockwrap{grid-row:1;justify-self:center}
+  .mid.prayer-layout .week.prayers{grid-row:2;width:100%;justify-self:stretch;padding:0;background:none;border:0;border-radius:0}
+  .week.prayers .hd{margin-bottom:.8vh}
+  .week.prayers ul{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:.8vw;direction:rtl}
+  .week.prayers li.prayer-card{
+    min-width:0;min-height:clamp(76px,10vh,108px);padding:.75vh .45vw;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.15vh;
+    border:1px solid rgba(220,184,111,.48);border-radius:14px;
+    background:rgba(4,14,9,.68);font-size:clamp(12px,.98vw,19px);line-height:1.25;text-align:center;
+  }
+  .week.prayers li.prayer-card:last-child{border-bottom:1px solid rgba(220,184,111,.48)}
+  .week.prayers li.prayer-card > .prayer-icon{display:block;flex:0 0 auto;width:clamp(19px,1.8vw,32px);height:clamp(19px,1.8vw,32px);max-width:none;padding:0;margin:0;overflow:visible;color:#F6EEDC}
+  .week.prayers .prayer-icon svg{display:block;width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+  .week.prayers .prayer-name{display:block;flex:0 0 auto;max-width:100%;color:#F6EEDC;font-size:.82em;font-weight:500}
+  .week.prayers .prayer-card .dt{display:block;flex:0 0 auto;min-width:0;text-align:center;color:#F6EEDC;font-size:.9em;font-weight:500}
+  .week.prayers li.prayer-card.past .prayer-name,.week.prayers li.prayer-card.past .dt{color:#A59B88}
+  .week.prayers li.prayer-card.next{
+    border-color:#F2C65E;background:linear-gradient(145deg,rgba(211,158,54,.36),rgba(4,14,9,.78));
+    box-shadow:0 0 20px rgba(220,184,111,.38),inset 0 0 18px rgba(220,184,111,.12);
+  }
+  .week.prayers li.prayer-card.next .prayer-icon,.week.prayers li.prayer-card.next .prayer-name,
+  .week.prayers li.prayer-card.next .dt{color:#FFD36A}
   .clockwrap{display:flex;flex-direction:column;align-items:center;justify-self:center}
   .clock{
     display:flex;align-items:baseline;justify-content:center;direction:ltr;
@@ -246,6 +270,7 @@
     .bottom{grid-template-columns:1fr 1fr}
     .p-match{grid-column:1/-1;text-align:right}
     .mrow{align-items:flex-start}
+    .week.prayers ul{grid-template-columns:repeat(3,minmax(0,1fr));gap:1vw}
   }
 </style>
 </head>
@@ -987,6 +1012,8 @@ const PANEL_TITLE = {shows:'هذا الأسبوع', prayers:'مواقيت الي
 function renderPanel(animate){
   const ul = document.getElementById('week-list'), hd = document.getElementById('week-hd');
   const P = CONFIG.panel;
+  document.querySelector('.mid').classList.toggle('prayer-layout', P === 'prayers');
+  document.querySelector('.week').classList.toggle('prayers', P === 'prayers');
   if(P === 'shows'){ renderWeekPage(animate); return; }
   let rows = [];
   if(P === 'prayers') rows = prayerRows();
@@ -1012,13 +1039,23 @@ function prayerRows(){
   if(!DAY_TIMES) return [];
   const p = riyadhParts(), now = p.h * 60 + p.mi;
   const names = {Fajr:'الفجر', Sunrise:'الشروق', Dhuhr:isFriday() ? 'الجمعة' : 'الظهر', Asr:'العصر', Maghrib:'المغرب', Isha:'العشاء'};
-  let next = null;
-  return Object.keys(names).filter(k => DAY_TIMES[k]).map(k => {
+  const icons = {
+    Fajr:'<path d="M3 18h18M5 14a7 7 0 0 1 14 0M12 3v2m-7 2 1.5 1.5m13-1.5L18 8m-9 6a3 3 0 0 1 6 0"/>',
+    Sunrise:'<path d="M3 18h18M5 14a7 7 0 0 1 14 0M12 3v2m-7 2 1.5 1.5m13-1.5L18 8"/>',
+    Dhuhr:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/>',
+    Asr:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/>',
+    Maghrib:'<path d="M3 18h18M5 14a7 7 0 0 1 14 0M12 3v2m-7 2 1.5 1.5m13-1.5L18 8m-9 6a3 3 0 0 1 6 0"/>',
+    Isha:'<path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5 8.5 8.5 0 1 0 20.5 14.2Z"/>'
+  };
+  const keys = Object.keys(names).filter(k => DAY_TIMES[k]);
+  const minute = k => { const [h, mi] = String(DAY_TIMES[k]).split(':').map(Number); return h * 60 + mi; };
+  const next = keys.find(k => minute(k) >= now) || keys[0];
+  return keys.map(k => {
     const [h, mi] = String(DAY_TIMES[k]).split(':').map(Number);
     const at = h * 60 + mi;
     let cls = at < now ? 'past' : '';
-    if(at >= now && !next){ next = k; cls = 'next'; }
-    return `<li class="${cls}"><span>${names[k]}</span><span class="dt">${fmt12(h, mi)}</span></li>`;
+    if(k === next) cls = 'next';
+    return `<li class="${cls} prayer-card"><span class="prayer-icon" aria-hidden="true"><svg viewBox="0 0 24 24">${icons[k]}</svg></span><span class="prayer-name">${names[k]}</span><span class="dt">${fmt12(h, mi)}</span></li>`;
   });
 }
 

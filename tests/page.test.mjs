@@ -53,7 +53,7 @@ for (const file of ['urtv.html', 'tv.html']) {
         const b = e.getBoundingClientRect(), cs = getComputedStyle(e);
         return cs.display !== 'none' && b.width && (b.left < -2 || b.right > innerWidth + 2 || b.bottom > innerHeight + 2);
       }).map(e => e.className || e.id || e.tagName).slice(0, 5);
-      const latin = (document.querySelector('.stage').innerText.match(/[0-9]+/g) || []).filter(x => x !== '500');
+      const latin = document.querySelector('.stage').innerText.match(/[0-9]+/g) || [];
       return { hh, mm, h: toN(hh), m: toN(mm), ap: document.getElementById('ck-ap').textContent,
                sub: document.getElementById('clock-sub').textContent, off, latin,
                photo: !!document.querySelector('.photo').style.backgroundImage };
@@ -62,7 +62,7 @@ for (const file of ['urtv.html', 'tv.html']) {
       && /^[٠-٩]{2}$/.test(r.mm) && r.m < 60 && ['ص', 'م'].includes(r.ap), JSON.stringify(r));
     check(`${tag}: city from the settings`, r.sub === 'بتوقيت جدة', r.sub);
     check(`${tag}: nothing off screen`, !r.off.length, r.off.join(', '));
-    check(`${tag}: no Latin digits (except S&P 500)`, !r.latin.length, r.latin.join(' '));
+    check(`${tag}: no Latin digits`, !r.latin.length, r.latin.join(' '));
     check(`${tag}: a background photo`, r.photo);
     await ctx.close();
   }
@@ -86,6 +86,27 @@ for (const [panel, [rows, title]] of Object.entries(EXPECT)) {
   check(`card ${panel}: no errors`, !errors.length, errors.join('; '));
   check(`card ${panel}: ${rows} rows, title right`, r.shown && r.n === rows && (!title || r.hd === title)
     && (title || ['آية اليوم', 'حديث اليوم'].includes(r.hd)), JSON.stringify(r));
+  if (panel === 'prayers') {
+    const prayerUI = await p.evaluate(() => {
+      const cards = [...document.querySelectorAll('#week-list .prayer-card')];
+      const next = cards.filter(x => x.classList.contains('next'));
+      const box = x => { const b = x.getBoundingClientRect(); return {w:b.width,h:b.height}; };
+      return {
+        cards:cards.length, next:next.length,
+        nextGold:next.length === 1 && getComputedStyle(next[0].querySelector('.prayer-name')).color === 'rgb(255, 211, 106)',
+        compact:cards.length === 6 && cards.every(x => box(x).h < 150),
+        icons:cards.every(x => !!x.querySelector('.prayer-icon svg')),
+        layout:document.querySelector('.mid').classList.contains('prayer-layout'),
+        clock:!!document.querySelector('.clock'), dates:!!document.querySelector('.dates'),
+        countdown:!!document.querySelector('#prayer-count'), weather:!!document.querySelector('#wx-temp'),
+        noMarkets:!document.querySelector('#tasi-chg,#spx-chg,#btc-chg')
+      };
+    });
+    check('prayer cards: compact, six with icons and one gold next prayer', prayerUI.cards === 6 && prayerUI.next === 1
+      && prayerUI.nextGold && prayerUI.compact && prayerUI.icons && prayerUI.layout, JSON.stringify(prayerUI));
+    check('prayer view: clock, dates, countdown and weather remain; markets are absent', prayerUI.clock && prayerUI.dates
+      && prayerUI.countdown && prayerUI.weather && prayerUI.noMarkets, JSON.stringify(prayerUI));
+  }
   await ctx.close();
 }
 {
@@ -175,7 +196,7 @@ for (const panel of ['prayers', 'verse', 'shows']) {
   await ctx.close();
 }
 
-// ---- offline start: weather, market arrows and the match row stay as they were last time
+// ---- offline start: weather and the match row stay as they were last time; markets are removed
 {
   const ctx = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
   await ctx.route(/^https?:/, r => r.abort());
@@ -186,7 +207,6 @@ for (const panel of ['prayers', 'verse', 'shows']) {
     document.getElementById('wx-temp').textContent = '٣٨°';
     document.getElementById('wx-desc').textContent = 'غبار';
     document.getElementById('wx-desc').classList.add('dust');
-    paintDir(TICKERS[0], true);
     document.getElementById('match-row').innerHTML = '<div class="saved-match">SAVED</div>';
     saveSnap();
   });
@@ -195,9 +215,9 @@ for (const panel of ['prayers', 'verse', 'shows']) {
   const r = await p.evaluate(() => ({
     temp: document.getElementById('wx-temp').textContent,
     dust: document.getElementById('wx-desc').classList.contains('dust'),
-    arrow: document.getElementById('tasi-chg').textContent,
+    markets: !!document.querySelector('#tasi-chg,#spx-chg,#btc-chg'),
     row: document.getElementById('match-row').textContent.trim() }));
-  check('offline start: weather, arrow and match row kept', r.temp === '٣٨°' && r.dust && r.arrow === '▲' && r.row === 'SAVED', JSON.stringify(r));
+  check('offline start: weather and match row kept; markets absent', r.temp === '٣٨°' && r.dust && !r.markets && r.row === 'SAVED', JSON.stringify(r));
   await ctx.close();
 }
 

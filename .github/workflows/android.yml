@@ -39,11 +39,26 @@ jobs:
           echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.p12"
           echo "ANDROID_KEYSTORE=$RUNNER_TEMP/release.p12" >> "$GITHUB_ENV"
 
+      - name: Verify update version
+        run: |
+          if [ "$GITHUB_RUN_NUMBER" -le 91 ]; then
+            echo "::error::versionCode must be greater than the installed versionCode 91"; exit 1
+          fi
+
       - name: Build APKs
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           URTV_BRANCH: ${{ github.ref_name }}   # the screensaver fetches its page from the branch it was built from
         run: gradle -p android assembleRelease --no-daemon
+
+      - name: Verify screensaver update compatibility
+        run: |
+          apksigner=$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          expected="bc71eeacc4614d3c165129898b8fea979c75f8918c355070e84436e3183dab2b"
+          actual=$("$apksigner" verify --print-certs android/app/build/outputs/apk/release/app-release.apk | awk -F': ' '/certificate SHA-256 digest:/ {print tolower($2); exit}')
+          if [ "$actual" != "$expected" ]; then
+            echo "::error::APK signing certificate does not match the installed screensaver app"; exit 1
+          fi
 
       - name: Rename
         run: |
